@@ -1,60 +1,69 @@
-# This script loads Sensitivity.csv and standardizes using the z-score method.
+# About ####
+#This script loads Sensitivity.csv and standardizes using the z-score method.
 # Then RDA is performed using the vegan package.
 # Authors: Elizabeth Herdter
 # For: Ocean Conservancy 
 # Date Created: 7/20/16
 
-#Load working directory
+#Load working directory####
 setwd("~/Desktop/Amberjack")
 
-#Load pertinent packages
+#Load pertinent packages####
 library(dplyr)
 library(vegan)
 
-#data(varespec)
-
-#Load data and perform z-score standardization ( (x-u)/sd ) so that it has a mean of 0 and a standard dev of 1d
+#Load data ####
+#and perform z-score standardization ( (x-u)/sd ) so that it has a mean of 0 and a standard dev of 1d
 
 data <- data.frame(read.csv("Sensitivity.csv", header=TRUE) %>% apply(2,scale))
-datasub<- data[-c(6,7,12,13),]
+datasub<- data[-c(6,7,12,13),-c(2,4:14, 17,19:20)] # Remove rows where changes were being made to the discard mortality. Mike and Liz decided to scrap that from the analysis. 
+# Also remove Bcurrent, SSBcurrent, Fcurr, and age specific M
 
 #Make predictor (X) matrix (Steepness, Rel.Mortality, M)
 #Make response (Y) matrix
+pred <- datasub %>% select(Steepness, M)
+resp <- datasub %>% select(-Steepness, -M)
 
-#Remove rows 6,7 and 12, 13 because we arent going to consider variation in Rel. mortality
-# Also remove column 2 which is the Rel. Mortality column
-cols<- c(1,3)
-rows <- c(1:5, 8:11)
-pred <- data[rows,cols] #Steepness,  M if you want to just plot with these
 rownames(pred) <- c("run1", "run2", "run3", "run4", "run5", "run6", "run7", "run8", "run9")
-
-#pred <- data[,c(1:2,4:14)] #Steepness, Rel.Mortality, age spec M
-resp <- data[rows ,15:30] #R0,B0, Bcurrent, SSB0, SSBcurrent, Fcurr,  Fref_spr, SSBref_spr, Fratio_spr, SSBratio_spr, MSST, SSBref_MSST etc...
 rownames(resp) <- c("run1", "run2", "run3", "run4", "run5", "run6", "run7", "run8", "run9")
 
-
-#Model building- constrained ordination
+#Model building- constrained ordination ####
 data.rda <- rda(resp~ Steepness + M, data= pred)#Plotting example from below:
 #http://www.inside-r.org/packages/cran/vegan/docs/ade2vegancca
-  #data.rda <- rda(resp ~ Steepness + Rel.Mort + M0+ M1+ M2 +M3+ M4+ M5+ M6+ M7+ M8+ M9 +M10, data=pred)
-plot.new()
-plot(data.rda, type="n", xlab="", ylab="", scale="symmetric") #when type="n" no points. it just sets the frame of the plot
-#remove the generic plot labels and then add them at the end- see below
-text(data.rda, dis="cn") #dis is short for display- when dis="sp" it will plot response variables(species); when its ="si" it will plot the years(sites); when its = "cn" it will plot the predictor vectors
-#points(data.rda, pch=21, col="red", bg="yellow", cex=1.2) - this is if we want the years(sites) plotted as unidentified points
-text(data.rda, "species",  col="blue", cex=0.8) #plots the response data (species)
-text(data.rda, "sites", col="red", cex=0.8)
-title(xlab="RDA 1 (57.0%)", ylab= "RDA 2 (22.9%)")  #labeled axes with %variance explained. Unfortunately it doesnt look like this is a default in the vegan package so I had to hand calculcate below. 
 
-#Determine % variance of each axis to put on axis labels
+## Variable selection ####
+#https://www.rdocumentation.org/packages/vegan/versions/2.4-2/topics/vegan-package
+mod0 <- rda(resp ~ 1, pred) #No constraints:like a PCA
+plot(mod0)
+mod <- ordistep(mod0, scope=formula(data.rda))
+anova(mod)
+anova(mod, by="margin")
+#both predictors are significant so will keep them in the model 
+
+# Make Plot ####
+plot.new()
+plot(data.rda, type="n", xlab="", ylab="") 
+ordipointlabel(data.rda, display="species", scaling="symm", add=TRUE, col="blue")
+#ordipointlable(data.rda, display="sites", scaling="symm", add=TRUE)
+text(data.rda, dis="cn") 
+#text(data.rda, "species",  col="blue", cex=0.8) 
+text(data.rda, "sites", col="red", cex=0.8)
+title(xlab="RDA 1 (55.19%)", ylab= "RDA 2 (22.61%)")  #labeled axes with %variance explained. Unfortunately it doesnt look like this is a default in the vegan package so I had to hand calculcate below. 
+
+#when type="n" no points. it just sets the frame of the plot
+#dis is short for display- when dis="sp" it will plot response variables(species); when its ="si" it will plot the years(sites); when its = "cn" it will plot the predictor vectors
+#labeled axes with %variance explained. Unfortunately it doesnt look like this is a default in the vegan package so I had to hand calculcate below. 
+#points(data.rda, pch=21, col="red", bg="yellow", cex=1.2) - this is if we want the years(sites) plotted as unidentified points
+
+#Determine % variance of each axis to put on axis labels####
 #http://cc.oulu.fi/~jarioksa/opetus/metodi/vegantutor.pdf
 # page 19-20
-#total constrained variance is 26.3605. Inertia is correlations (or variance)
-# So proportion of variance from first axis is = 15.065/26.3605
+#total constrained variance. Inertia is correlations (or variance)
+# So proportion of variance from first axis is = RDA1/31.30
 
 data.rda
-per.var1 <- 11.628/20.38  #Inertia of axis 1/total
-per.var2 <- 4.675/20.38 #Inertia of axis 2/total
+per.var1 <- 9.428/17.080  #Inertia of axis 1/total
+per.var2 <- 3.862/17.080 #Inertia of axis 2/total
 
 # NOTES:
 #1. I tested out plotting with the age-specific M values and they plot right on top of each other.
@@ -62,9 +71,7 @@ per.var2 <- 4.675/20.38 #Inertia of axis 2/total
 #2. The runs are labeled by run number. We can change however we want by adjusting rowname command. There are 13 runs. one base run and 4 additional runs per parameter. 
 #3. Vectors need to be added to the species(response) variables but I haven't figured out how to do that. 
 
-
-############################
-# Make multiplot of relationship between predictors and response
+# Make multiplot of relationship between predictors and response####
 ####################
 
 # M first
